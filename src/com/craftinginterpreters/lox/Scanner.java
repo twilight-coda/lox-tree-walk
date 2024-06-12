@@ -11,7 +11,7 @@ public class Scanner {
     private int current;
     private int start;
     private int line;
-    private ArrayList<Token> tokens;
+    private final ArrayList<Token> tokens;
     private static final HashMap<String, TokenType> reservedKeywords;
     static {
         reservedKeywords = new HashMap<>();
@@ -35,6 +35,8 @@ public class Scanner {
 
     public Scanner(String source) {
         this.source = source;
+        this.tokens = new ArrayList<>();
+        this.line = 1;
     }
 
     List<Token> scanTokens() {
@@ -100,7 +102,7 @@ public class Scanner {
     }
 
     private void identifier() {
-        while (isAlphanumeric(source.charAt(current))) current++;
+        while (isAlphanumeric(peek())) current++;
         String txt = source.substring(start, current);
         TokenType type = reservedKeywords.get(txt);
         if (type == null) {
@@ -180,16 +182,17 @@ public class Scanner {
 
     private boolean matchNextChar(char expected) {
         if (current >= source.length()) return false;
-        if (source.charAt(current) != expected) return true;
+        if (source.charAt(current) != expected) return false;
         current++;
         return true;
     }
 
     private boolean isAlphaOrUnderscore(char c) {
-        return c >= 'a' && c <= 'b' ||
-                c >= 'A' && c <= 'B' ||
+        return c >= 'a' && c <= 'z' ||
+                c >= 'A' && c <= 'Z' ||
                 c == '_';
     }
+
     private boolean isAlphanumeric(char c) {
         return isAlphaOrUnderscore(c) || isDigit(c);
     }

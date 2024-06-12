@@ -7,6 +7,7 @@ import java.io.Reader;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.List;
 
 public class Lox {
     private static boolean hadError;
@@ -43,6 +44,11 @@ public class Lox {
 
     private static void run(String source) {
         System.out.println("running..");
+        Scanner scanner = new Scanner(source);
+        List<Token> tokens = scanner.scanTokens();
+        for (Token t : tokens) {
+            System.out.println(t);
+        }
         if (hadError) System.exit(65);
     }
 
