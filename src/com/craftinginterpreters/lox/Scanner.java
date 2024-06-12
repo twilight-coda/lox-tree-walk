@@ -77,6 +77,8 @@ public class Scanner {
             case '/':
                 if (matchNextChar('/')) {
                     while (!isAtEnd() && peek() != '\n') current ++;
+                } else if (matchNextChar('*')) {
+                    blockComment();
                 } else {
                     addToken(SLASH);
                 }
@@ -99,6 +101,22 @@ public class Scanner {
                     break;
                 }
         }
+    }
+
+    private void blockComment() {
+        int blockCounter = 1;
+        current++; // Consume '*' right after the first '/'.
+        while (!isAtEnd() && blockCounter != 0) {
+            if (peek() == '*' && peekNext() == '/') blockCounter--;
+            if (peek() == '/' && peekNext() == '*') blockCounter++;
+            if (peek() == '\n') line++;
+            current++;
+        }
+        if (isAtEnd() && blockCounter != 0) {
+            Lox.error(line, "Block comment not ended properly");
+            return;
+        }
+        current++; // Consume the last '/'.
     }
 
     private void identifier() {
