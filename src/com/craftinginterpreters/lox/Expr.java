@@ -8,6 +8,7 @@ public abstract class Expr {
         T visitBinary(Binary expr);
         T visitLiteral(Literal expr);
         T visitGrouping(Grouping expr);
+        T visitTernary(Ternary expr);
     }
 
     public static class Unary extends Expr {
@@ -39,6 +40,27 @@ public abstract class Expr {
         @Override
         <T> T accept(Visitor<T> visitor) {
             return visitor.visitBinary(this);
+        }
+    }
+
+    public static class Ternary extends Expr {
+        final Expr left;
+        final Token opOne;
+        final Expr mid;
+        final Token opTwo;
+        final Expr right;
+
+        Ternary(Expr left, Token opOne, Expr mid, Token opTwo, Expr right) {
+            this.left = left;
+            this.opOne = opOne;
+            this.mid = mid;
+            this.opTwo = opTwo;
+            this.right = right;
+        }
+
+        @Override
+        <T> T accept(Visitor<T> visitor) {
+            return visitor.visitTernary(this);
         }
     }
 

@@ -3,6 +3,9 @@ package com.craftinginterpreters.lox;
 import java.util.List;
 
 public class Parser {
+    private static class ParseError extends RuntimeException {
+    }
+
     private final List<Token> tokens;
     private int current;
 
@@ -10,8 +13,39 @@ public class Parser {
         this.tokens = tokens;
     }
 
+    public Expr parse() {
+        try {
+            return expression();
+        } catch (ParseError error) {
+            return null;
+        }
+    }
+
     private Expr expression() {
-        return equality();
+        return ternary();
+    }
+
+    private Expr ternary() {
+        Expr expr = commaSeparated();
+        if (match(TokenType.QUESTION)) {
+            Token opOne = previous();
+            Expr then = commaSeparated();
+            consume(TokenType.COLON, "Ternary operator requires an else condition followed by a ':'");
+            Token opTwo = previous();
+            Expr otherwise = commaSeparated();
+            expr = new Expr.Ternary(expr, opOne, then, opTwo, otherwise);
+        }
+        return expr;
+    }
+
+    private Expr commaSeparated() {
+        Expr expr = equality();
+        while (match(TokenType.COMMA)) {
+            Token op = previous();
+            Expr right = equality();
+            expr = new Expr.Binary(expr, op, right);
+        }
+        return expr;
     }
 
     private Expr equality() {
@@ -26,7 +60,14 @@ public class Parser {
 
     private Expr comparison() {
         Expr expr = term();
-        while (match(TokenType.LESS, TokenType.LESS_EQUAL, TokenType.GREATER, TokenType.GREATER_EQUAL)) {
+        while (
+                match(
+                        TokenType.LESS,
+                        TokenType.LESS_EQUAL,
+                        TokenType.GREATER,
+                        TokenType.GREATER_EQUAL
+                )
+        ) {
             Token operator = previous();
             Expr right = term();
             expr = new Expr.Binary(expr, operator, right);
@@ -58,6 +99,20 @@ public class Parser {
         if (match(TokenType.BANG, TokenType.MINUS)) {
             Token operator = previous();
             return new Expr.Unary(operator, unary());
+        } else if (
+                match(
+                        TokenType.EQUAL_EQUAL,
+                        TokenType.BANG_EQUAL,
+                        TokenType.LESS,
+                        TokenType.LESS_EQUAL,
+                        TokenType.GREATER,
+                        TokenType.GREATER_EQUAL,
+                        TokenType.PLUS,
+                        TokenType.STAR,
+                        TokenType.SLASH
+                )
+        ) {
+            throw error(peek(), "Expect an operand before '" + peek().lexeme + "'");
         }
         return primary();
     }
@@ -70,12 +125,15 @@ public class Parser {
 
         if (match(TokenType.LEFT_PAREN)) {
             Expr expr = new Expr.Grouping(expression());
-            if (advance().type != TokenType.RIGHT_PAREN) {
-                throw new Error("Matching ) not found");
-            }
+            consume(TokenType.RIGHT_PAREN, "Expect ')' after expression.");
             return expr;
         }
-        throw new Error("No matching primary token found");
+        throw error(peek(), "Expect expression.");
+    }
+
+    private Token consume(TokenType type, String s) {
+        if (check(type)) return advance();
+        throw error(peek(), s);
     }
 
     boolean match(TokenType... tokens) {
@@ -108,5 +166,30 @@ public class Parser {
 
     private boolean isAtEnd() {
         return peek().type == TokenType.EOF;
+    }
+
+    private ParseError error(Token token, String message) {
+        Lox.error(token, message);
+        return new ParseError();
+    }
+
+    private void synchronize() {
+        Token prev = advance();
+        if (prev.type == TokenType.SEMICOLON) return;
+
+        while (!isAtEnd()) {
+            switch (peek().type) {
+                case IF:
+                case FUN:
+                case CLASS:
+                case VAR:
+                case RETURN:
+                case FOR:
+                case WHILE:
+                case PRINT:
+                    return;
+            }
+            advance();
+        }
     }
 }
