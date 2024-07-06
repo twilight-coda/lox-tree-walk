@@ -52,11 +52,15 @@ public class Interpreter implements Expr.Visitor<Object> {
             }
             case SLASH -> {
                 checkNumberOperands(expr.operator, left, right);
+                double denominator = (double) right;
+                if (denominator == 0) {
+                    throw new RuntimeError(expr.operator, "Cannot divide by zero.");
+                }
                 yield (double) left / (double) right;
             }
             case PLUS -> {
-                if (left instanceof String && right instanceof String) {
-                    yield (String)left + (String) right;
+                if (left instanceof String || right instanceof String) {
+                    yield stringify(left) + stringify(right);
                 }
                 if (left instanceof Double && right instanceof Double) {
                     yield (double) left + (double) right;
