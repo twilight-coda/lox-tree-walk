@@ -9,6 +9,9 @@ public abstract class Expr {
         T visitLiteral(Literal expr);
         T visitGrouping(Grouping expr);
         T visitTernary(Ternary expr);
+        T visitVariable(Variable variable);
+        T visitAssignment(Assign assign);
+        T visitLogicalOperator(Logical logical);
     }
 
     public static class Unary extends Expr {
@@ -87,6 +90,51 @@ public abstract class Expr {
         @Override
         <T> T accept(Visitor<T> visitor) {
             return visitor.visitGrouping(this);
+        }
+    }
+
+    public static class Variable extends Expr {
+        final Token identifier;
+
+        public Variable(Token identifier) {
+            this.identifier = identifier;
+        }
+
+        @Override
+        <T> T accept(Visitor<T> visitor) {
+            return visitor.visitVariable(this);
+        }
+    }
+
+    public static class Assign extends Expr {
+        final Token var;
+        final Expr value;
+
+        Assign(Token var,Expr value) {
+            this.var = var;
+            this.value = value;
+        }
+
+        @Override
+        <T> T accept(Visitor<T> visitor) {
+            return visitor.visitAssignment(this);
+        }
+    }
+
+    public static class Logical extends Expr {
+        final Expr left;
+        final Token operator;
+        final Expr right;
+
+        Logical(Expr left, Token operator, Expr right) {
+            this.left = left;
+            this.operator = operator;
+            this.right = right;
+        }
+
+        @Override
+        <T> T accept(Visitor<T> visitor) {
+            return visitor.visitLogicalOperator(this);
         }
     }
 

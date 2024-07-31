@@ -1,13 +1,27 @@
 package com.craftinginterpreters.lox;
 
-public class Interpreter implements Expr.Visitor<Object> {
-    void interpret(Expr expression) {
+import java.util.List;
+
+public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
+
+    private Environment environment = new Environment();
+
+    void interpret(List<Stmt> statements) {
         try {
-            Object output = evaluate(expression);
-            System.out.println(stringify(output));
+            executeStatements(statements);
         } catch (RuntimeError e) {
             Lox.runtimeError(e);
         }
+    }
+
+    private void executeStatements(List<Stmt> statements) {
+        for (Stmt statement : statements) {
+            executeStatement(statement);
+        }
+    }
+
+    private void executeStatement(Stmt statement) {
+        statement.accept(this);
     }
 
     private String stringify(Object value) {
@@ -109,6 +123,29 @@ public class Interpreter implements Expr.Visitor<Object> {
         return isTruthy((condition)) ? evaluate(expr.mid) : evaluate(expr.right);
     }
 
+    @Override
+    public Object visitVariable(Expr.Variable variable) {
+        return environment.get(variable.identifier);
+    }
+
+    @Override
+    public Object visitAssignment(Expr.Assign assign) {
+        Object rValue = evaluate(assign.value);
+        environment.assign(assign.var, rValue);
+        return rValue;
+    }
+
+    @Override
+    public Object visitLogicalOperator(Expr.Logical logical) {
+        Object left = evaluate(logical.left);
+        if (logical.operator.type == TokenType.OR) {
+            if (isTruthy(left)) return left;
+        } else {
+            if (!isTruthy(left)) return left;
+        }
+        return evaluate(logical.right);
+    }
+
     /**
      * Everything except null and false is true.
      */
@@ -133,5 +170,58 @@ public class Interpreter implements Expr.Visitor<Object> {
     private void checkNumberOperands(Token token, Object left, Object right) {
         if (left instanceof Double && right instanceof Double) return;
         throw new RuntimeError(token, "Operands must be numbers.");
+    }
+
+    @Override
+    public Void visitExpressionStmt(Stmt.Expression expressionStatement) {
+        evaluate(expressionStatement.expression);
+        return null;
+    }
+
+    @Override
+    public Void visitPrintStmt(Stmt.Print printStatement) {
+        System.out.println(stringify(evaluate(printStatement.expression)));
+        return null;
+    }
+
+    @Override
+    public Void visitVarStmt(Stmt.Var var) {
+        environment.define(var.name.lexeme, var.initializer != null ? evaluate(var.initializer) : null);
+        return null;
+    }
+
+    @Override
+    public Void visitBlockStmt(Stmt.Block block) {
+        executeBlock(block.statements, new Environment(environment));
+        return null;
+    }
+
+    @Override
+    public Void visitIfStmt(Stmt.If ifStmt) {
+        Object conditionValue = evaluate(ifStmt.condition);
+        if (isTruthy(conditionValue)) {
+            executeStatement(ifStmt.thenStatements);
+        } else {
+            executeStatement(ifStmt.elseStatements);
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitWhileStatement(Stmt.While whileStmt) {
+        while (isTruthy(evaluate(whileStmt.condition))) {
+            executeStatement(whileStmt.whileBlock);
+        }
+        return null;
+    }
+
+    private void executeBlock(List<Stmt> statements, Environment environment) {
+        Environment previous = this.environment;
+        try {
+            this.environment = environment;
+            executeStatements(statements);
+        } finally {
+            this.environment = previous;
+        }
     }
 }

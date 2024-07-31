@@ -1,5 +1,7 @@
 package com.craftinginterpreters.lox;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class Parser {
@@ -13,16 +15,133 @@ public class Parser {
         this.tokens = tokens;
     }
 
-    public Expr parse() {
+    public List<Stmt> parse() {
+        List<Stmt> statements = new ArrayList<>();
+        while (!isAtEnd()) {
+            statements.add(declaration());
+        }
+        return statements;
+    }
+
+    private Stmt declaration() {
         try {
-            return expression();
-        } catch (ParseError error) {
+            if (match(TokenType.VAR)) {
+                return varDecl();
+            }
+        } catch (ParseError e) {
+            synchronize();
             return null;
         }
+        return statement();
+    }
+
+    private Stmt varDecl() {
+        Token varName = consume(TokenType.IDENTIFIER, "Expect variable name.");
+        Expr initializer = null;
+        if (match(TokenType.EQUAL)) {
+            initializer = expression();
+        }
+        consume(TokenType.SEMICOLON, "Expect ';' after variable declaration.");
+        return new Stmt.Var(varName, initializer);
+    }
+
+    private Stmt statement() {
+        if (match(TokenType.PRINT)) return printStatement();
+        if (match(TokenType.LEFT_BRACE)) return new Stmt.Block(block());
+        if (match(TokenType.IF)) return ifStatement();
+        if (match(TokenType.WHILE)) return whileStatement();
+        if (match(TokenType.FOR)) return forLoopStatement();
+        return expressionStatement();
+    }
+
+    private Stmt forLoopStatement() {
+        consume(TokenType.LEFT_PAREN, "Expect '(' after 'for'.");
+        Stmt initializer;
+        if (match(TokenType.SEMICOLON)) {
+            initializer = null;
+        } else if (match(TokenType.VAR)) {
+            initializer = varDecl();
+        } else {
+            initializer = expressionStatement();
+        }
+        Expr condition = null;
+        if (!check(TokenType.SEMICOLON)) {
+            condition = expression();
+        }
+        consume(TokenType.SEMICOLON, "Expect ';' after for loop initializer.");
+        Expr increment = null;
+        if (!check(TokenType.RIGHT_PAREN)) {
+            increment = expression();
+        }
+        consume(TokenType.RIGHT_PAREN, "Expect ')' after for clauses.");
+        Stmt body = statement();
+        if (increment != null) {
+            body = new Stmt.Block(Arrays.asList(
+                    body,
+                    new Stmt.Expression(increment)
+            ));
+        }
+        if (condition == null) condition = new Expr.Literal(true);
+        body = new Stmt.While(condition, body);
+        if (initializer != null) body = new Stmt.Block(Arrays.asList( initializer, body ));
+        return body;
+    }
+
+    private Stmt ifStatement() {
+        consume(TokenType.LEFT_PAREN, "Expect '(' after 'if'.");
+        Expr condition = expression();
+        consume(TokenType.RIGHT_PAREN, "Expect ')' after if condition.");
+        Stmt thenStatements = statement();
+        Stmt elseStatements = match(TokenType.ELSE) ? statement() : null;
+        return new Stmt.If(condition, thenStatements, elseStatements);
+    }
+
+    private Stmt whileStatement() {
+        consume(TokenType.LEFT_PAREN, "Expect '(' after 'while'.");
+        Expr condition = expression();
+        consume(TokenType.RIGHT_PAREN, "Expect ')' after while condition");
+        Stmt whileBlock = statement();
+        return new Stmt.While(condition, whileBlock);
+    }
+
+    private List<Stmt> block() {
+        ArrayList<Stmt> statements = new ArrayList<>();
+        while (!check(TokenType.RIGHT_BRACE) && !isAtEnd()) {
+            statements.add(declaration());
+        }
+
+        consume(TokenType.RIGHT_BRACE, "Expect '}' after block");
+        return statements;
+    }
+
+    private Stmt expressionStatement() {
+        Expr value = expression();
+        consume(TokenType.SEMICOLON, "Expect ';' after expression.");
+        return new Stmt.Expression(value);
+    }
+
+    private Stmt printStatement() {
+        Expr value = expression();
+        consume(TokenType.SEMICOLON, "Expect ';' after value.");
+        return new Stmt.Print(value);
     }
 
     private Expr expression() {
-        return ternary();
+        return assignment();
+    }
+
+    private Expr assignment() {
+        Expr expr = ternary();
+        if (match(TokenType.EQUAL)) {
+            Token equals = previous();
+            Expr value = assignment();
+            if (expr instanceof Expr.Variable) {
+                Token var = ((Expr.Variable) expr).identifier;
+                return new Expr.Assign(var, value);
+            }
+            error(equals, "invalid assignment target.");
+        }
+        return expr;
     }
 
     private Expr ternary() {
@@ -39,11 +158,31 @@ public class Parser {
     }
 
     private Expr commaSeparated() {
-        Expr expr = equality();
+        Expr expr = or();
         while (match(TokenType.COMMA)) {
             Token op = previous();
-            Expr right = equality();
+            Expr right = or();
             expr = new Expr.Binary(expr, op, right);
+        }
+        return expr;
+    }
+
+    private Expr or() {
+        Expr expr = and();
+        if (match(TokenType.OR)) {
+            Token operator = previous();
+            Expr right = and();
+            expr = new Expr.Logical(expr, operator, right);
+        }
+        return expr;
+    }
+
+    private Expr and() {
+        Expr expr = equality();
+        if (match(TokenType.AND)) {
+            Token operator = previous();
+            Expr right = equality();
+            expr = new Expr.Logical(expr, operator, right);
         }
         return expr;
     }
@@ -127,6 +266,10 @@ public class Parser {
             Expr expr = new Expr.Grouping(expression());
             consume(TokenType.RIGHT_PAREN, "Expect ')' after expression.");
             return expr;
+        }
+
+        if (match(TokenType.IDENTIFIER)) {
+            return new Expr.Variable(previous());
         }
         throw error(peek(), "Expect expression.");
     }
