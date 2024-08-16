@@ -1,10 +1,13 @@
 package com.craftinginterpreters.lox;
 
+import javax.xml.crypto.dsig.keyinfo.KeyValue;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 public class Parser {
+    private boolean parsingCallArgs;
+
     private static class ParseError extends RuntimeException {
     }
 
@@ -51,7 +54,34 @@ public class Parser {
         if (match(TokenType.IF)) return ifStatement();
         if (match(TokenType.WHILE)) return whileStatement();
         if (match(TokenType.FOR)) return forLoopStatement();
+        if (match(TokenType.FUN)) return functionStatement("function");
+        if (match(TokenType.RETURN)) return returnStmt();
         return expressionStatement();
+    }
+
+    private Stmt functionStatement(String kind) {
+        Token fnName = consume(TokenType.IDENTIFIER, "Expect " + kind + " name.");
+        consume(TokenType.LEFT_PAREN, "Expect '(' after " + kind + " name.");
+        ArrayList<Token> parameters = new ArrayList<>();
+        if (!check(TokenType.RIGHT_PAREN)) {
+            do {
+                if (parameters.size() >= 255) {
+                    error(peek(), "Can't have more than 255 parameters");
+                }
+                parameters.add(consume(TokenType.IDENTIFIER, "Expect parameter name"));
+            } while (match(TokenType.COMMA));
+        }
+        consume(TokenType.RIGHT_PAREN, "Expect ')' after " + kind + " name.");
+        consume(TokenType.LEFT_BRACE, "Expect '{' before " + kind + " body.");
+        List<Stmt> body = block();
+        return new Stmt.Function(fnName, parameters, body);
+    }
+
+    private Stmt returnStmt() {
+        Token returnKeyword = previous();
+        Expr returnExpression = check(TokenType.SEMICOLON) ? null : expression();
+        consume(TokenType.SEMICOLON, "Expect ';' after return statement.");
+        return new Stmt.Return(returnKeyword, returnExpression);
     }
 
     private Stmt forLoopStatement() {
@@ -159,6 +189,7 @@ public class Parser {
 
     private Expr commaSeparated() {
         Expr expr = or();
+        if (parsingCallArgs) return expr;
         while (match(TokenType.COMMA)) {
             Token op = previous();
             Expr right = or();
@@ -253,7 +284,39 @@ public class Parser {
         ) {
             throw error(peek(), "Expect an operand before '" + peek().lexeme + "'");
         }
-        return primary();
+        return call();
+    }
+
+    private Expr call() {
+        Expr callee = primary();
+        while (true) {
+            if (match(TokenType.LEFT_PAREN)) {
+                callee = finishCall(callee);
+            } else {
+                break;
+            }
+        }
+        return callee;
+    }
+
+    private Expr finishCall(Expr callee) {
+        ArrayList<Expr> args = new ArrayList<>();
+        if (!check(TokenType.RIGHT_PAREN)) {
+            parsingCallArgs = true;
+            try {
+                do {
+                    if (args.size() >= 255) {
+                        error(peek(), "Can't have more than 255 arguments");
+                    }
+                    args.add(expression());
+                } while (match(TokenType.COMMA));
+            } finally {
+                parsingCallArgs = false;
+            }
+        }
+        Token paren = consume(TokenType.RIGHT_PAREN, "Expect ')' after function arguments");
+        callee = new Expr.Call(callee, paren, args);
+        return callee;
     }
 
     private Expr primary() {

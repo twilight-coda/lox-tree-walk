@@ -4,7 +4,27 @@ import java.util.List;
 
 public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
-    private Environment environment = new Environment();
+    final Environment globals = new Environment();
+    private Environment environment = globals;
+
+    Interpreter() {
+        globals.define("clock", new LoxCallable() {
+            @Override
+            public Object call(Interpreter interpreter, List<Object> args) {
+                return (double) System.currentTimeMillis() / 1000.0;
+            }
+
+            @Override
+            public int arity() {
+                return 0;
+            }
+
+            @Override
+            public String toString() {
+                return "<native fn>";
+            }
+        });
+    }
 
     void interpret(List<Stmt> statements) {
         try {
@@ -146,6 +166,20 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         return evaluate(logical.right);
     }
 
+    @Override
+    public Object visitCallExpr(Expr.Call call) {
+        Object callee = evaluate(call.callee);
+        List<Object> args = call.args.stream().map(this::evaluate).toList();
+        if (!(callee instanceof LoxCallable function)) {
+            throw new RuntimeError(call.paren, "Can only call functions and classes");
+        }
+        if (args.size() != function.arity()) {
+            throw new RuntimeError(call.paren,
+                    "Expected " + function.arity() + " arguments but received " + args.size());
+        }
+        return function.call(this, args);
+    }
+
     /**
      * Everything except null and false is true.
      */
@@ -202,7 +236,7 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         if (isTruthy(conditionValue)) {
             executeStatement(ifStmt.thenStatements);
         } else {
-            executeStatement(ifStmt.elseStatements);
+            if (ifStmt.elseStatements != null) executeStatement(ifStmt.elseStatements);
         }
         return null;
     }
@@ -215,7 +249,20 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         return null;
     }
 
-    private void executeBlock(List<Stmt> statements, Environment environment) {
+    @Override
+    public Void visitFunctionStmt(Stmt.Function function) {
+        LoxFunction fun = new LoxFunction(function, environment);
+        environment.define(function.fnName.lexeme, fun);
+        return null;
+    }
+
+    @Override
+    public Void visitReturnStmt(Stmt.Return returnStmt) {
+        Object value = returnStmt.returnExpression == null ? null : evaluate(returnStmt.returnExpression);
+        throw new Return(value);
+    }
+
+    public void executeBlock(List<Stmt> statements, Environment environment) {
         Environment previous = this.environment;
         try {
             this.environment = environment;

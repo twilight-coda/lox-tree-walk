@@ -12,6 +12,8 @@ public abstract class Stmt {
         public Void visitBlockStmt(Block block);
         public Void visitIfStmt(If ifStmt);
         public Void visitWhileStatement(While whileStmt);
+        public Void visitFunctionStmt(Function function);
+        public Void visitReturnStmt(Return returnStmt);
     }
 
     abstract <T> void accept(Visitor<T> visitor);
@@ -99,6 +101,38 @@ public abstract class Stmt {
         @Override
         <T> void accept(Visitor<T> visitor) {
             visitor.visitWhileStatement(this);
+        }
+    }
+
+    public static class Function extends Stmt {
+        final Token fnName;
+        final List<Token> parameters;
+        final List<Stmt> body;
+
+        Function(Token fnName, List<Token> parameters, List<Stmt> body) {
+            this.fnName = fnName;
+            this.parameters = parameters;
+            this.body = body;
+        }
+
+        @Override
+        <T> void accept(Visitor<T> visitor) {
+            visitor.visitFunctionStmt(this);
+        }
+    }
+
+    public static class Return extends Stmt {
+        final Token returnKeyword;
+        final Expr returnExpression;
+
+        Return(Token returnKeyword, Expr returnExpression) {
+            this.returnKeyword = returnKeyword;
+            this.returnExpression = returnExpression;
+        }
+
+        @Override
+        <T> void accept(Visitor<T> visitor) {
+            visitor.visitReturnStmt(this);
         }
     }
 

@@ -1,6 +1,8 @@
 
 package com.craftinginterpreters.lox;
 
+import java.util.List;
+
 public abstract class Expr {
 
     interface Visitor<T> {
@@ -12,6 +14,7 @@ public abstract class Expr {
         T visitVariable(Variable variable);
         T visitAssignment(Assign assign);
         T visitLogicalOperator(Logical logical);
+        T visitCallExpr(Call call);
     }
 
     public static class Unary extends Expr {
@@ -135,6 +138,23 @@ public abstract class Expr {
         @Override
         <T> T accept(Visitor<T> visitor) {
             return visitor.visitLogicalOperator(this);
+        }
+    }
+
+    public static class Call extends Expr {
+        final Expr callee;
+        final Token paren;
+        final List<Expr> args;
+
+        Call(Expr callee, Token paren, List<Expr> args) {
+            this.callee = callee;
+            this.paren = paren;
+            this.args = args;
+        }
+
+        @Override
+        <T> T accept(Visitor<T> visitor) {
+            return visitor.visitCallExpr(this);
         }
     }
 
